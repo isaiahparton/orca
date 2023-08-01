@@ -17,33 +17,38 @@ create_page :: proc(doc: ^Document, size: [2]Unit, background: Color) -> (page: 
 	return
 }
 
+Axis :: enum {
+	H,
+	V,
+}
 get_exact_value :: proc(doc: ^Document, value: Unit) -> Px {
 	pixels: Px
-	#partial switch type in value {
-		case Px: pixels = type
-		case Pt: pixels = Px((type / 72.0) * Pt(doc.ppi))
-		case In: pixels = Px(type * In(doc.ppi))
+	switch type in value {
+		case Pc:
+		pixels = Px(type)
+		case Px: 
+		pixels = type
+		case Pt: 
+		pixels = Px((type / 72.0) * Pt(doc.ppi))
+		case In: 
+		pixels = Px(type * In(doc.ppi))
 	}
 	return pixels
 }
-get_exact_values :: proc(doc: ^Document, values: [$N]Unit) -> [N]Pixels {
-	pixels: [N]Pixels
-	for i in 0..<N {
+get_exact_values :: proc(doc: ^Document, values: [2]Unit) -> [2]Pixels {
+	pixels: [2]Pixels
+	for i in 0..<2 {
 		pixels[i] = get_exact_value(doc, values[i])
 	}
 	return pixels
 }
 
 boxes_overlap :: proc(a, b: Box) -> bool {
-	return (a.origin.x + a.size.x >= b.origin.x && a.origin.x <= b.origin.x + b.size.x && a.origin.y + a.size.y >= b.origin.y && a.origin.y <= b.origin.y + b.size.y)
-}
-
-resize_document :: proc(doc: ^Document, size: [2]Unit) {
-	pixel_size := get_exact_values(doc, size)
+	return (a.x + a.w >= b.x && a.x <= b.x + b.w && a.y + a.y >= b.y && a.y <= b.y + b.y)
 }
 
 render_page :: proc(doc: ^Document, page: ^Page) {
-	render_page_region(doc, page, {size = page.size})
+	render_page_region(doc, page, {w = page.size.x, h = page.size.y})
 }
 render_page_region :: proc(doc: ^Document, page: ^Page, region: Box) {
 
@@ -62,7 +67,7 @@ render_page_region :: proc(doc: ^Document, page: ^Page, region: Box) {
 	for object in region_objects {
 		#partial switch info in object.info {
 			case Text_Object_Info:
-			render_text_object(doc, page.image, get_exact_values(doc, object.origin), info)
+			render_text_object(doc, page.image, get_exact_values(doc, object.origin), region, info)
 
 			case Box_Object_Info:
 			origin := get_exact_values(doc, object.origin)

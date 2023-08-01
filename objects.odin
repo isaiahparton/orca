@@ -11,23 +11,12 @@ Object :: struct {
 	origin: [2]Unit,
 	box: Box,
 	info: Object_Info,
-	state: Object_State,
+	state: Object_Data,
 }
 
-// Text
-Text_Object_Info :: struct {
-	font: Font_Handle,
-	size: Unit,
-	line_limit: Maybe(Unit),
-	text: string,
-	align: Text_Alignment,
-	baseline: Text_Baseline,
-	fill_style: Fill_Style,
-	stroke_style: Stroke_Style,
-}
-Text_Object_State :: struct {
-	size: [2]Px,
-	info: Text_Object_Info,
+Image_Object_Info :: struct {
+	size: [2]Unit,
+	image: Image,
 }
 
 // A basic box
@@ -45,8 +34,8 @@ Ellipse_Object_Info :: struct {
 	stroke_style: Stroke_Style,
 }
 
-Object_State :: union {
-	Text_Object_State,
+Object_Data :: union {
+	Text_Object_Data,
 }
 Object_Info :: union {
 	Text_Object_Info,

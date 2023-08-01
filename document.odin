@@ -16,34 +16,23 @@ Document :: struct {
 	stroke_style: Stroke_Style,
 	fill_style: Fill_Style,
 	text_style: Text_Style,
+	place_side: Side,
+	place_size: Unit,
+	place_offset: Unit,
 	// Layout
 	layout: Stack(Layout, MAX_LAYOUTS),
-	text_layout: Stack(Text_Layout, MAX_LAYOUTS),
-}
-
-add_page :: proc(doc: ^Document, size: [2]Unit, background: Color) -> (page: ^Page, ok: bool) {
-	append(&doc.pages, create_page(doc, size, background))
-	page = &doc.pages[len(doc.pages) - 1]
-	ok = true
-	return
 }
 
 add_object :: proc(doc: ^Document, obj: Object) {
 	append(&doc.objects, obj)
 }
 
-current_layout :: proc(doc: ^Document) -> ^Layout {
-	return &doc.layout.items[doc.layout.height - 1]
+begin_page :: proc(doc: ^Document, size: [2]Unit, background: Color) -> (page: ^Page) {
+	append(&doc.pages, create_page(doc, size, background))
+	page = &doc.pages[len(doc.pages) - 1]
+	push_layout(doc, {box = {0, 0, page.size.x, page.size.y}})
+	return
 }
-push_layout :: proc(doc: ^Document, origin, size: [2]Unit) {
-	layout: Layout = {
-		box = {
-			origin = get_exact_values(doc, origin),
-			size = get_exact_values(doc, size),
-		},
-	}
-	push_stack(&doc.layout, layout)
-}
-pop_layout :: proc(doc: ^Document) {
-	pop_stack(&doc.layout)
+end_page :: proc(doc: ^Document) {
+	pop_layout(doc)
 }

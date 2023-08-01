@@ -14,53 +14,27 @@ main :: proc() {
 	doc: Document
 	doc.ppi = 140
 
-	font_title, _ := load_font(&doc, "Edwardian Script ITC.ttf")
-	font_content, _ := load_font(&doc, "calibri-regular.ttf")
+	title_font, _ := load_font(&doc, "Edwardian Script ITC.ttf")
+	content_font, _ := load_font(&doc, "calibri-regular.ttf")
 
-	page, _ := add_page(&doc, {In(5), In(5)}, 255)
-	
-	add_object(&doc, {
-		origin = {In(2.5), 0},
-		info = Box_Object_Info({
-			size = {Px(1), In(5)},
-			fill_style = {80, 80, 80, 255},
-		}),
-	})
-
-	begin_text_layout(&doc, {In(2.5), 0}, .Bottom)
-		add_text(&doc, {
-			text = "Hellope!",
-			font = font_title,
-			size = Pt(72),
+	page := begin_page(&doc, {In(5), In(5)}, 255)
+		add_text(&doc, .Top, {
+			font = title_font,
+			text = "Lorem Ipsum",
+			fill_style = {0, 0, 0, 255},
+			size = In(1),
 			align = .Center,
-			fill_style = {0, 0, 0, 255},
 		})
-		add_space(&doc, In(0.5))
-		add_text(&doc, {
-			text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Maecenas sed quam nisi. Nulla facilisi. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae; Fusce consequat purus vel congue euismod.",
-			font = font_content,
-			line_limit = Unit(In(2)),
-			size = Pt(11),
-			align = .Left,
+		add_space(&doc, .Top, In(0.4))
+		add_text(&doc, .Top, {
+			font = content_font,
+			text = "Vivamus elementum arcu quis nibh tincidunt posuere vel a neque. In hac habitasse platea dictumst. Mauris mattis ullamcorper dignissim. Aliquam nec tortor vulputate, malesuada lacus non, placerat enim. Morbi auctor velit sed pellentesque lacinia. Morbi luctus ex velit, in fringilla eros vulputate quis. Praesent congue sed ante maximus euismod. Ut vel turpis nisl. Sed viverra dolor sed mauris porttitor volutpat. Nulla eu cursus est. Curabitur non magna id elit malesuada vehicula ut id odio. Aliquam malesuada ut nisl vel gravida. Phasellus maximus erat et malesuada vestibulum. Nunc eu odio at nulla ornare rutrum. Vestibulum dignissim sit amet justo non mollis. Nam in velit egestas, placerat quam scelerisque, varius urna.",
 			fill_style = {0, 0, 0, 255},
-		})
-		add_text(&doc, {
-			text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Maecenas sed quam nisi. Nulla facilisi. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae; Fusce consequat purus vel congue euismod.",
-			font = font_content,
-			line_limit = Unit(In(2)),
 			size = Pt(11),
+			line_limit = Unit(In(2)),
 			align = .Center,
-			fill_style = {0, 0, 0, 255},
 		})
-		add_text(&doc, {
-			text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Maecenas sed quam nisi. Nulla facilisi. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae; Fusce consequat purus vel congue euismod.",
-			font = font_content,
-			line_limit = Unit(In(2)),
-			size = Pt(11),
-			align = .Right,
-			fill_style = {0, 0, 0, 255},
-		})
-	end_text_layout(&doc)
+	end_page(&doc)
 
 	s := time.now()
 	render_page(&doc, page)

@@ -65,78 +65,133 @@ Font :: struct {
 
 Font_Handle :: int
 
+// Text
+Text_Object_Info :: struct {
+	font: Font_Handle,
+	size: Unit,
+	line_limit: Maybe(Unit),
+	text: string,
+	align: Text_Alignment,
+	baseline: Text_Baseline,
+	fill_style: Fill_Style,
+	stroke_style: Stroke_Style,
+	word_wrap: bool,
+}
+Text_Object_Data :: struct {
+	size: [2]Px,
+	exact_size: Px,
+	info: Text_Object_Info,
+}
+
 Text_Iterator :: struct {
+	// Font
+	font: ^Font,
+	size: ^Font_Size,
 	// Current line size
+	line_limit: Maybe(Px),
 	line_size: Px,
+	new_line: bool,
 	// Glyph offset
 	offset: [2]Px,
 	// Current codepoint and glyph data
 	codepoint: rune,
 	glyph: ^Glyph_Data,
 	// Current byte index
-	index: int,
+	next_word,
+	index,
+	next_index: int,
+	// Do offset
+	do_offset: bool,
+}
+make_text_iterator :: proc(doc: ^Document, info: Text_Object_Info) -> (it: Text_Iterator) {
+	it.font = &doc.fonts[info.font]
+	it.size, _ = get_font_size(it.font, get_exact_value(doc, info.size))
+	if line_limit, ok := info.line_limit.?; ok {
+		it.line_limit = get_exact_value(doc, get_exact_value(doc, line_limit))
+	}
+	return
 }
 iterate_text :: proc(it: ^Text_Iterator, doc: ^Document, info: Text_Object_Info) -> bool {
-	font := &doc.fonts[info.font]
-	font_size, _ := get_font_size(font, get_exact_value(doc, info.size))
-	codepoint, bytes := utf8.decode_rune(info.text[it.index:])
 	
+	// Update index
+	it.index = it.next_index
+	// Decode next codepoint
+	codepoint, bytes := utf8.decode_rune(info.text[it.index:])
+	// Update next index
+	it.next_index += bytes
+	// Update horizontal offset with last glyph
+	if it.new_line {
+		it.line_size = 0
+	}
 	if it.glyph != nil {
 		it.offset.x += it.glyph.advance
 		it.line_size += it.glyph.advance
 	}
-
-	line_limit_reached: bool
-	if line_limit, ok := info.line_limit.?; ok {
-		if it.line_size > get_exact_value(doc, line_limit) {
-			line_limit_reached = true
+	// Get current glyph data
+	if glyph, ok := get_font_glyph(it.font, it.size, codepoint); ok {
+		it.glyph = glyph
+	}
+	space: Px = it.glyph.advance if it.glyph != nil else 0
+	if info.word_wrap && it.next_index >= it.next_word {
+		for i := it.next_index; ; {
+			c, b := utf8.decode_rune(info.text[i:])
+			if c == ' ' || i >= len(info.text) - 1 {
+				it.next_word = i
+				break
+			}
+			if g, ok := get_font_glyph(it.font, it.size, codepoint); ok {
+				space += g.advance
+			}
+			i += b
 		}
 	}
 
-	if codepoint == '\n' || line_limit_reached || it.index == 0 {
+	it.new_line = false
+	new_line := false
+	if codepoint == '\n' || (it.line_limit != nil && it.line_size + space >= it.line_limit.?) {
+		new_line = true
+	}
+	// Update vertical offset
+	if new_line {
+		it.new_line = true
+		it.offset.y += it.size.baseline + it.size.line_gap
+	}
+	// Reset offset if new line
+	if it.do_offset && (new_line || it.index == 0) {
 		it.offset.x = 0
 		#partial switch info.align {
-			case .Center: it.offset.x -= measure_next_line(doc, info, it.index, font, font_size) / 2
-			case .Right: it.offset.x -= measure_next_line(doc, info, it.index, font, font_size)
+			case .Center: it.offset.x -= measure_next_line(doc, info, it^) / 2
+			case .Right: it.offset.x -= measure_next_line(doc, info, it^)
 		}
 	}
-	if codepoint == '\n' || line_limit_reached  {
-		it.offset.y += font_size.baseline + font_size.line_gap
-		it.line_size = 0
-	} else {
-		it.glyph, _ = get_font_glyph(font, font_size, codepoint)
-		it.index += bytes
-		it.codepoint = codepoint
-	}
-
-	return bytes != 0
+	it.codepoint = codepoint
+	
+	return it.index < len(info.text)
 }
 
 /*
 	String processing procedures
 */
-measure_next_line :: proc(doc: ^Document, info: Text_Object_Info, offset: int, font: ^Font, font_size: ^Font_Size) -> Px {
-	line_limit: Maybe(Px)
-	if info.line_limit != nil {
-		line_limit = get_exact_value(doc, info.line_limit.?)
-	}
-	s := info.text[offset:]
-	size: Px
-	for c, i in s {
-		if c == '\n' {
-			if i == 0 {
-				continue
-			} else {
-				break
-			}
-		} else if c != ' ' && line_limit != nil && size > line_limit.? {
+measure_next_line :: proc(doc: ^Document, info: Text_Object_Info, it: Text_Iterator) -> Px {
+	it := it
+	it.do_offset = false
+	for iterate_text(&it, doc, info) {
+		if it.new_line {
 			break
 		}
-		if glyph, ok := get_font_glyph(font, font_size, c); ok {
-			size += glyph.advance
+	}
+	return it.line_size
+}
+measure_next_word :: proc(doc: ^Document, info: Text_Object_Info, it: Text_Iterator) -> (size: Px, end: int) {
+	it := it
+	it.do_offset = false
+	it.line_size = 0
+	for iterate_text(&it, doc, info) {
+		if it.codepoint == ' ' {
+			break
 		}
 	}
-	return size
+	return it.line_size, it.next_index
 }
 // Load a font and store it in the given document
 load_font :: proc(doc: ^Document, file: string) -> (handle: Font_Handle, success: bool) {
@@ -209,7 +264,7 @@ get_font_glyph :: proc(font: ^Font, size: ^Font_Size, codepoint: rune) -> (data:
 		glyph_data = map_insert(&size.glyphs, codepoint, Glyph_Data({
 			image = image,
 			offset = {Px(glyph_offset_x), Px(glyph_offset_y) + size.baseline},
-			advance = Px(f32(advance) * size.scale)
+			advance = Px(f32(advance) * size.scale),
 		}))
 		success = true
 	} else {
@@ -219,39 +274,25 @@ get_font_glyph :: proc(font: ^Font, size: ^Font_Size, codepoint: rune) -> (data:
 	return
 }
 // Measure text
-measure_text_object :: proc(doc: ^Document, info: Text_Object_Info, font: ^Font, font_size: ^Font_Size) -> [2]Px {
+measure_text_object :: proc(doc: ^Document, info: Text_Object_Info) -> [2]Px {
 	size: [2]Px
-	line_size: Px
-	line_limit: Maybe(Px)
-	if info.line_limit != nil {
-		line_limit = get_exact_value(doc, info.line_limit.?)
-	}
-	for codepoint in info.text {
-		line_limit_reached := (line_limit != nil && line_size > line_limit.?)
-		if codepoint == '\n' || line_limit_reached {
-			size.x = max(size.x, line_size)
-			size.y += font_size.baseline + font_size.line_gap
-			line_size = 0
-		} else {
-			if glyph, ok := get_font_glyph(font, font_size, codepoint); ok {
-				line_size += glyph.advance
-			}
+	it := make_text_iterator(doc, info)
+	for iterate_text(&it, doc, info) {
+		if it.new_line {
+			size.x = max(size.x, it.line_size)
+			size.y += it.size.baseline + it.size.line_gap
 		}
 	}
-	size.y += font_size.baseline + font_size.line_gap
+	size.y += it.size.baseline + it.size.line_gap
 	return size
 }
 // Render text to a given image
-render_text_object :: proc(doc: ^Document, target: Image, origin: [2]Px, info: Text_Object_Info) {
+render_text_object :: proc(doc: ^Document, target: Image, origin: [2]Px, clip: Box, info: Text_Object_Info) {
 	origin := origin
-	// Get font
-	font := &doc.fonts[info.font]
-	// Get font size data
-	font_size, _ := get_font_size(font, get_exact_value(doc, info.size))
 	// Measure the text
 	size: [2]Px
 	if info.baseline != .Top {
-		size = measure_text_object(doc, info, font, font_size)
+		size = measure_text_object(doc, info)
 		#partial switch info.baseline {
 			case .Center: origin.y -= size.y / 2
 			case .Bottom: origin.y -= size.y
@@ -259,29 +300,38 @@ render_text_object :: proc(doc: ^Document, target: Image, origin: [2]Px, info: T
 	}
 	// Render text
 	point := origin
-	it: Text_Iterator
+	it := make_text_iterator(doc, info)
+	it.do_offset = true
 	for iterate_text(&it, doc, info) {
 		if it.codepoint != '\n' && it.codepoint != ' ' {
-			for x in 0..<it.glyph.image.width {
-				for y in 0..<it.glyph.image.height {
-					value := it.glyph.image.data[x + y * it.glyph.image.width]
-					dst_x := x + point.x + it.offset.x + it.glyph.offset.x
-					dst_y := y + point.y + it.offset.y + it.glyph.offset.y
-					if dst_y < 0 {
-						continue
+			dst_box: Box = {
+				point.x + it.offset.x + it.glyph.offset.x,
+				point.y + it.offset.y + it.glyph.offset.y,
+				it.glyph.image.width,
+				it.glyph.image.height,
+			}
+			if box, ok := clip_box(dst_box, clip); ok {
+				for x in box.x..<box.x + box.w {
+					for y in box.y..<box.y + box.h {
+						src_x := x - dst_box.x
+						src_y := y - dst_box.y
+						i := int(x + y * target.width) * 4
+						if i < 0 || i >= len(target.data) {
+							continue
+						}
+						color: Color = {
+							target.data[i],
+							target.data[i+1],
+							target.data[i+2],
+							target.data[i+3],
+						}
+						value := it.glyph.image.data[src_x + src_y * it.glyph.image.width]
+						color = blend_colors(color, info.fill_style, {255, 255, 255, value})
+						target.data[i] = color.r
+						target.data[i+1] = color.g
+						target.data[i+2] = color.b
+						target.data[i+3] = color.a
 					}
-					i := (dst_x + dst_y * target.width) * 4
-					color: Color = {
-						target.data[i],
-						target.data[i+1],
-						target.data[i+2],
-						target.data[i+3],
-					}
-					color = blend_colors(color, info.fill_style, {255, 255, 255, value})
-					target.data[i] = color.r
-					target.data[i+1] = color.g
-					target.data[i+2] = color.b
-					target.data[i+3] = color.a
 				}
 			}
 		}
