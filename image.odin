@@ -53,6 +53,10 @@ create_image :: proc(width, height: Px, channels: int, color: Color) -> Image {
 
 	return image
 }
+destroy_image :: proc(image: ^Image) {
+	delete(image.data)
+	image^ = {}
+}
 
 get_image_pixel :: proc(img: Image, x, y: Px) -> (res: Color) {
 	assert(img.channels < 5)
@@ -82,6 +86,14 @@ paint_image_on_image :: proc(src, dst: Image, src_box, dst_box: Box, tint: Color
 
 			color := blend_colors(get_image_pixel(dst, x, y), get_image_pixel(src, src_x, src_y), 255)
 			set_image_pixel(dst, x, y, color)
+		}
+	}
+}
+paint_box_on_image :: proc(target: Image, box: Box, color: Color) {
+	for y in box.y..<box.y + box.h {
+		for x in box.x..<box.x + box.w {
+			color := blend_colors(get_image_pixel(target, x, y), color, 255)
+			set_image_pixel(target, x, y, color)
 		}
 	}
 }

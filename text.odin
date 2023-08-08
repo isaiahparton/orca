@@ -3,6 +3,7 @@ package orca
 import "core:os"
 import "core:fmt"
 
+import "core:time"
 import "core:runtime"
 import "core:strings"
 import "core:math"
@@ -54,9 +55,16 @@ Font_Size :: struct {
 	// Glyph data
 	glyphs: map[rune]Glyph_Data,
 }
+destroy_font_size :: proc(size: ^Font_Size) {
+	for key, &value in size.glyphs {
+		destroy_image(&value.image)
+	}
+	delete(size.glyphs)
+	size^ = {}
+}
 
 Font :: struct {
-	name: string,
+	file_data: []u8,
 	// Internal truetype data
 	data: _Font_Data,
 	// Cache important glyph data
@@ -132,15 +140,16 @@ iterate_text :: proc(it: ^Text_Iterator, doc: ^Document, info: Text_Object_Info)
 		it.glyph = glyph
 	}
 	space: Px = it.glyph.advance if it.glyph != nil else 0
-	if info.word_wrap && it.next_index >= it.next_word {
-		for i := it.next_index; ; {
+	if info.word_wrap && it.next_index >= it.next_word && codepoint != ' ' {
+		j := it.next_word
+		for i := it.next_word; ; {
 			c, b := utf8.decode_rune(info.text[i:])
-			if c == ' ' || i >= len(info.text) - 1 {
-				it.next_word = i
-				break
-			}
 			if g, ok := get_font_glyph(it.font, it.size, codepoint); ok {
 				space += g.advance
+			}
+			if c == ' ' || i >= len(info.text) - 1 {
+				it.next_word = i + b
+				break
 			}
 			i += b
 		}
@@ -196,12 +205,18 @@ measure_next_word :: proc(doc: ^Document, info: Text_Object_Info, it: Text_Itera
 // Load a font and store it in the given document
 load_font :: proc(doc: ^Document, file: string) -> (handle: Font_Handle, success: bool) {
 	font: Font
-	if file_data, ok := os.read_entire_file(file); ok {
-		if ttf.InitFont(&font.data, transmute([^]u8)(transmute(runtime.Raw_Slice)file_data).data, 0) {
+	if font.file_data, success = os.read_entire_file(file); success {
+		if ttf.InitFont(&font.data, transmute([^]u8)(transmute(runtime.Raw_Slice)font.file_data).data, 0) {
 			for i in 0..<MAX_FONTS {
 				if !doc.font_exists[i] {
 					doc.font_exists[i] = true
 					doc.fonts[i] = font
+					// Add the font to the atlas
+					default_runes: []rune = {32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 258, 259, 260, 261, 262, 263, 264, 265, 0x2022}
+					for r in default_runes {
+						
+					}
+
 					handle = Font_Handle(i)
 					success = true
 					break
@@ -210,6 +225,14 @@ load_font :: proc(doc: ^Document, file: string) -> (handle: Font_Handle, success
 		}
 	}
 	return
+}
+destroy_font :: proc(font: ^Font) {
+	for _, &size in font.sizes {
+		destroy_font_size(&size)
+	}
+	delete(font.sizes)
+	delete(font.file_data)
+	font^ = {}
 }
 // Get the data for a given pixel size of the font
 get_font_size :: proc(font: ^Font, size: Px) -> (data: ^Font_Size, ok: bool) {
@@ -287,15 +310,13 @@ measure_text_object :: proc(doc: ^Document, info: Text_Object_Info) -> [2]Px {
 	return size
 }
 // Render text to a given image
-render_text_object :: proc(doc: ^Document, target: Image, origin: [2]Px, clip: Box, info: Text_Object_Info) {
+render_text_object :: proc(doc: ^Document, target: Image, origin: [2]Px, clip: Box, info: Text_Object_Info, data: Text_Object_Data) {
 	origin := origin
 	// Measure the text
-	size: [2]Px
 	if info.baseline != .Top {
-		size = measure_text_object(doc, info)
 		#partial switch info.baseline {
-			case .Center: origin.y -= size.y / 2
-			case .Bottom: origin.y -= size.y
+			case .Center: origin.y -= data.size.y / 2
+			case .Bottom: origin.y -= data.size.y
 		}
 	}
 	// Render text

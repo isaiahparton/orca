@@ -11,7 +11,7 @@ Object :: struct {
 	origin: [2]Unit,
 	box: Box,
 	info: Object_Info,
-	state: Object_Data,
+	data: Object_Data,
 }
 
 Image_Object_Info :: struct {

@@ -16,6 +16,10 @@ create_page :: proc(doc: ^Document, size: [2]Unit, background: Color) -> (page: 
 	page.image = create_image(page.size.x, page.size.y, 4, background)
 	return
 }
+destroy_page :: proc(page: ^Page) {
+	destroy_image(&page.image)
+	page^ = {}
+}
 
 Axis :: enum {
 	H,
@@ -32,6 +36,8 @@ get_exact_value :: proc(doc: ^Document, value: Unit) -> Px {
 		pixels = Px((type / 72.0) * Pt(doc.ppi))
 		case In: 
 		pixels = Px(type * In(doc.ppi))
+		case Mm:
+		pixels = Px(In(type / 25.4) * In(doc.ppi))
 	}
 	return pixels
 }
@@ -53,6 +59,7 @@ render_page :: proc(doc: ^Document, page: ^Page) {
 render_page_region :: proc(doc: ^Document, page: ^Page, region: Box) {
 
 	region_objects: [dynamic]^Object
+	defer delete(region_objects)
 	// Append items whos bounding boxes overlap the region
 	for &object in doc.objects {
 		if boxes_overlap(object.box, region) {
@@ -67,7 +74,7 @@ render_page_region :: proc(doc: ^Document, page: ^Page, region: Box) {
 	for object in region_objects {
 		#partial switch info in object.info {
 			case Text_Object_Info:
-			render_text_object(doc, page.image, get_exact_values(doc, object.origin), region, info)
+			render_text_object(doc, page.image, get_exact_values(doc, object.origin), region, info, object.data.(Text_Object_Data))
 
 			case Box_Object_Info:
 			origin := get_exact_values(doc, object.origin)

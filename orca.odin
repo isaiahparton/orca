@@ -4,17 +4,20 @@ Px :: i64
 In :: distinct f64
 Pt :: distinct f64 
 Pc :: distinct f64
+Mm :: distinct f64
 
 Pixels :: Px
 Inches :: In
 Points :: Pt
 Percent :: Pc
+Millimeters :: Mm
 
 Unit :: union #no_nil {
 	Pixels,
 	Inches,
 	Points,
 	Percent,
+	Millimeters,
 }
 
 Stack :: struct($T: typeid, $N: int) {

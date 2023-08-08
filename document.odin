@@ -23,6 +23,20 @@ Document :: struct {
 	layout: Stack(Layout, MAX_LAYOUTS),
 }
 
+destroy_document :: proc(doc: ^Document) {
+	delete(doc.objects)
+	for &page in doc.pages {
+		destroy_page(&page)
+	}
+	for i in 0..<MAX_FONTS {
+		if doc.font_exists[i] {
+			destroy_font(&doc.fonts[i])
+		}
+	}
+	delete(doc.pages)
+	doc^ = {}
+}
+
 add_object :: proc(doc: ^Document, obj: Object) {
 	append(&doc.objects, obj)
 }
