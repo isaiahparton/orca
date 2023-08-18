@@ -2,6 +2,11 @@ package orca
 
 import "core:fmt"
 import "core:mem"
+import "core:strings"
+import "core:slice"
+import "core:runtime"
+import img "vendor:stb/image"
+import "core:image/png"
 
 Color :: [4]u8
 
@@ -33,11 +38,37 @@ blend_colors :: proc(dst, src, tint: Color) -> (out: Color) {
 
 Image :: struct {
 	data: []u8,
-	width, 
+	width,
 	height: Px,
 	channels: int,
 }
 
+save_image :: proc(image: Image, file: string) {
+	file_cstr := strings.clone_to_cstring(file)
+	img.write_png(file_cstr, i32(image.width), i32(image.height), i32(image.channels), (transmute(runtime.Raw_Slice)image.data).data, 0)
+}
+clone_image :: proc(img: Image) -> Image {
+		return Image{
+			data = slice.clone(img.data),
+			width = img.width,
+			height = img.height,
+			channels = img.channels,
+		}
+}
+load_image :: proc(file: string) -> (img: Image, ok: bool) {
+	if _img, err := png.load_from_file(file); err == nil {
+		img = Image{
+			data = _img.pixels.buf[:],
+			width = Px(_img.width),
+			height = Px(_img.height),
+			channels = _img.channels,
+		}
+		ok = true
+	} else {
+		fmt.printf("[ERROR] %v\n", err)
+	}
+	return
+}
 create_image :: proc(width, height: Px, channels: int, color: Color) -> Image {
 	image: Image
 
@@ -61,7 +92,7 @@ destroy_image :: proc(image: ^Image) {
 get_image_pixel :: proc(img: Image, x, y: Px) -> (res: Color) {
 	assert(img.channels < 5)
 	res = 255
-	i := int(x + y * img.width)
+	i := int(x + y * img.width) * img.channels
 	for j in 0..<img.channels {
 		res[j] = img.data[i + j]
 	}
@@ -69,7 +100,7 @@ get_image_pixel :: proc(img: Image, x, y: Px) -> (res: Color) {
 }
 set_image_pixel :: proc(img: Image, x, y: Px, color: Color) {
 	assert(img.channels < 5)
-	i := int(x + y * img.width)
+	i := int(x + y * img.width) * img.channels
 	for j in 0..<img.channels {
 		img.data[i + j] = color[j]
 	}

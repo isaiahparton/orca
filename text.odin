@@ -73,6 +73,12 @@ Font :: struct {
 
 Font_Handle :: int
 
+Text_Wrap :: enum {
+	None,
+	Normal,
+	Word,
+}
+
 // Text
 Text_Object_Info :: struct {
 	font: Font_Handle,
@@ -83,7 +89,7 @@ Text_Object_Info :: struct {
 	baseline: Text_Baseline,
 	fill_style: Fill_Style,
 	stroke_style: Stroke_Style,
-	word_wrap: bool,
+	wrap: Text_Wrap,
 }
 Text_Object_Data :: struct {
 	size: [2]Px,
@@ -113,9 +119,9 @@ Text_Iterator :: struct {
 }
 make_text_iterator :: proc(doc: ^Document, info: Text_Object_Info) -> (it: Text_Iterator) {
 	it.font = &doc.fonts[info.font]
-	it.size, _ = get_font_size(it.font, get_exact_value(doc, info.size))
+	it.size, _ = get_font_size(it.font, to_exact(doc, info.size))
 	if line_limit, ok := info.line_limit.?; ok {
-		it.line_limit = get_exact_value(doc, get_exact_value(doc, line_limit))
+		it.line_limit = to_exact(doc, to_exact(doc, line_limit))
 	}
 	return
 }
@@ -140,7 +146,7 @@ iterate_text :: proc(it: ^Text_Iterator, doc: ^Document, info: Text_Object_Info)
 		it.glyph = glyph
 	}
 	space: Px = it.glyph.advance if it.glyph != nil else 0
-	if info.word_wrap && it.next_index >= it.next_word && codepoint != ' ' {
+	if info.wrap == .Word && it.next_index >= it.next_word && codepoint != ' ' {
 		j := it.next_word
 		for i := it.next_word; ; {
 			c, b := utf8.decode_rune(info.text[i:])
@@ -158,7 +164,11 @@ iterate_text :: proc(it: ^Text_Iterator, doc: ^Document, info: Text_Object_Info)
 	it.new_line = false
 	new_line := false
 	if codepoint == '\n' || (it.line_limit != nil && it.line_size + space >= it.line_limit.?) {
-		new_line = true
+		if info.wrap == .None {
+			return false
+		} else {
+			new_line = true
+		}
 	}
 	// Update vertical offset
 	if new_line {

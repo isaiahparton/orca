@@ -25,6 +25,9 @@ Document :: struct {
 
 destroy_document :: proc(doc: ^Document) {
 	delete(doc.objects)
+	for &obj in doc.objects {
+		destroy_object(&obj)
+	}
 	for &page in doc.pages {
 		destroy_page(&page)
 	}

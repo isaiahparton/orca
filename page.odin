@@ -12,7 +12,7 @@ Page :: struct {
 }
 
 create_page :: proc(doc: ^Document, size: [2]Unit, background: Color) -> (page: Page) {
-	page.size = get_exact_values(doc, size)
+	page.size = to_exact(doc, size)
 	page.image = create_image(page.size.x, page.size.y, 4, background)
 	return
 }
@@ -25,7 +25,7 @@ Axis :: enum {
 	H,
 	V,
 }
-get_exact_value :: proc(doc: ^Document, value: Unit) -> Px {
+to_exact_single :: proc(doc: ^Document, value: Unit) -> Px {
 	pixels: Px
 	switch type in value {
 		case Pc:
@@ -41,12 +41,16 @@ get_exact_value :: proc(doc: ^Document, value: Unit) -> Px {
 	}
 	return pixels
 }
-get_exact_values :: proc(doc: ^Document, values: [2]Unit) -> [2]Pixels {
+to_exact_double :: proc(doc: ^Document, values: [2]Unit) -> [2]Pixels {
 	pixels: [2]Pixels
 	for i in 0..<2 {
-		pixels[i] = get_exact_value(doc, values[i])
+		pixels[i] = to_exact(doc, values[i])
 	}
 	return pixels
+}
+to_exact :: proc {
+	to_exact_single, 
+	to_exact_double,
 }
 
 boxes_overlap :: proc(a, b: Box) -> bool {
@@ -74,14 +78,30 @@ render_page_region :: proc(doc: ^Document, page: ^Page, region: Box) {
 	for object in region_objects {
 		#partial switch info in object.info {
 			case Text_Object_Info:
-			render_text_object(doc, page.image, get_exact_values(doc, object.origin), region, info, object.data.(Text_Object_Data))
+			render_text_object(doc, page.image, object.origin, region, info, object.data.(Text_Object_Data))
+
+			case Image_Object_Info: 
+			for x in 0..<info.size.x {
+				for y in 0..<info.size.y {
+					i := ((x + object.origin.x) + (y + object.origin.y) * page.image.width) * 4
+					color: Color = {
+						page.image.data[i],
+						page.image.data[i+1],
+						page.image.data[i+2],
+						page.image.data[i+3],
+					}
+					color = blend_colors(color, get_image_pixel(info.image, x, y), info.tint)
+					page.image.data[i] = color.r
+					page.image.data[i+1] = color.g
+					page.image.data[i+2] = color.b
+					page.image.data[i+3] = color.a
+				}
+			}
 
 			case Box_Object_Info:
-			origin := get_exact_values(doc, object.origin)
-			size := get_exact_values(doc, info.size)
-			for x in 0..<size.x {
-				for y in 0..<size.y {
-					i := ((x + origin.x) + (y + origin.y) * page.image.width) * 4
+			for x in 0..<info.size.x {
+				for y in 0..<info.size.y {
+					i := ((x + object.origin.x) + (y + object.origin.y) * page.image.width) * 4
 					color: Color = {
 						page.image.data[i],
 						page.image.data[i+1],
@@ -97,16 +117,14 @@ render_page_region :: proc(doc: ^Document, page: ^Page, region: Box) {
 			}
 
 			case Ellipse_Object_Info:
-			origin := get_exact_values(doc, object.origin)
-			size := get_exact_values(doc, info.size)
-			radius := max(size.x, size.y) / 2
-			top_left := origin - radius
-			bottom_right := origin + radius
-			ratio := f32(size.x) / f32(size.y)
+			radius := max(info.size.x, info.size.y) / 2
+			top_left := object.origin - radius
+			bottom_right := object.origin + radius
+			ratio := f32(info.size.x) / f32(info.size.y)
 			for x in top_left.x..<bottom_right.x {
 				for y in top_left.y..<bottom_right.y {
-					nx := f32(x - origin.x)
-					ny := f32(y - origin.y) * f32(size.x / size.y)
+					nx := f32(x - object.origin.x)
+					ny := f32(y - object.origin.y) * f32(info.size.x / info.size.y)
 					dist := linalg.length(([2]f32){nx, ny})
 					if dist > f32(radius) {
 						continue
